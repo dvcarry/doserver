@@ -77,6 +77,7 @@ router.post("/", async (req, res) => {
 router.put("/", async (req, res) => {
 
     const { name, type, balance, period, child, goal, plan, repeat, date, id, action, repeatday } = req.body;
+    console.log("🚀 ~ file: tasks.js ~ line 80 ~ router.put ~ date", date)
 
     const dateOrNull = date ? date : null
 
