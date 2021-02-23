@@ -106,13 +106,15 @@ router.put("/", async (req, res) => {
 
 router.put("/do", async (req, res) => {
 
-    const { id, index, plan } = req.body;
+    const { id } = req.body;
 
     const today = new Date()
 
     try {
         const { rows: task } = await pool.query('SELECT * FROM tasks WHERE id = $1', [id])
-        console.log("🚀 ~ file: tasks.js ~ line 114 ~ router.put ~ task", task[0])
+
+        const index = task[0].index
+        const plan = task[0].plan
         
         if (task[0].repeat) {
             const newDate = new Date()
