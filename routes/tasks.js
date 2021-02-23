@@ -91,7 +91,7 @@ router.put("/", async (req, res) => {
                 [name, type, balance, period, child, goal, plan, repeat, dateOrNull, id, index, action, repeatday])
             await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND plan = $2', [resTask.rows[0].index, resTask.rows[0].plan])
         } else {
-            const { rows: tasks } = await pool.query('UPDATE tasks SET name = $1, type = $2, balance = $3, period = $4, child = $5, goal = $6, plan = $7, repeat = $8, date = $9, action = $11, repeatday = $12 WHERE id = $10',
+            const { rows: tasks } = await pool.query('UPDATE tasks SET name = $1, type = $2, balance = $3, period = $4, child = $5, goal = $6, plan = $7, repeat = $8, date::date = $9, action = $11, repeatday = $12 WHERE id = $10',
                 [name, type, balance, period, child, goal, plan, repeat, dateOrNull, id, action, repeatday])
         }
 
