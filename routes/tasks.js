@@ -1,4 +1,6 @@
 const express = require("express");
+import moment from 'moment';
+
 const router = express.Router();
 const pool = require('../config/bd');
 
@@ -118,8 +120,10 @@ router.put("/do", async (req, res) => {
         const plan = task[0].plan
         
         if (task[0].repeat) {
-            const newDate = new Date()
-            newDate.setDate(today.getDate() + task[0].repeatday);
+
+            // const newDate = new Date()                      
+            // newDate.setDate(today.getDate() + task[0].repeatday);
+            const newDate = moment(today).add(task[0].repeatday, 'days').format('YYYY-MM-DD')  
 
             await pool.query(
                 'INSERT INTO tasks (name, type, balance, period, child, goal, plan, repeat, date, done, index, action, repeatday) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',
