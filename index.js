@@ -5,12 +5,14 @@ const cors = require('cors');
 
 
 const tasks = require('./routes/tasks')
+const days = require('./routes/days')
 
 app.use(cors());
 app.use(express.json());
 
 
 app.use("/api/tasks", tasks);
+app.use("/api/days", days);
 
 
 app.listen(5002, () => {
