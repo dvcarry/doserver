@@ -20,4 +20,16 @@ router.get("/", async (req, res) => {
     }
 });
 
+router.post("/", async (req, res) => {
+
+    const today = moment(new Date()).format('YYYY-MM-DD') 
+
+    try {
+        const {rows: day} = await pool.query("INSERT INTO days (date, isplan) VALUES($1,$2) RETURNING *", [today, true])
+        res.status(201).send(day[0]);
+    } catch (error) {
+        console.log(error)
+    }
+});
+
 module.exports = router;
