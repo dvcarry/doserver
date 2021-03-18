@@ -16,7 +16,7 @@ app.use("/api/days", days);
 
 
 app.listen(5002, () => {
-    console.log('server start')
+    console.log('server start 5002')
 })
 
 
