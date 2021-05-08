@@ -6,6 +6,16 @@ const pool = require('../config/bd');
 const constants = require("../config/domain");
 
 
+const addToNewPlan = async (task_id, oldPlan, newPlan, oldIndex) => {
+    const changeOldPlan = await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND plan = $2 AND done = $3', [oldIndex, oldPlan, false])
+    const response = await pool.query('SELECT count(id) FROM tasks WHERE done = false AND plan = $1', [newPlan])
+    const newIndex = +response.rows[0].count
+    const changedTask = await pool.query('UPDATE tasks SET index = $1, plan = $2 WHERE id = $3', [newIndex, newPlan, task_id])    
+}
+
+
+
+
 router.get("/", async (req, res) => {
     const today = new Date()
 
@@ -15,7 +25,6 @@ router.get("/", async (req, res) => {
 
         // const { rows: tasksToUpdate } = await pool.query('SELECT * FROM tasks WHERE date::date = $1 AND done = $2', [today, false])
         // const { rows: tasksToUpdate } = await pool.query('SELECT * FROM tasks WHERE date::date = $1 AND done = $2 AND plan != $3', [today, false, 'today'])
-        // console.log("🚀 ~ file: tasks.js ~ line 15 ~ router.get ~ tasksToUpdate", tasksToUpdate)
 
         // for (let i = 0; i < tasksToUpdate.length; i++) {
         //     await pool.query('UPDATE tasks SET plan = $1, index = (SELECT count(id) FROM tasks WHERE plan = $1 and done = $4) + $2  WHERE id = $3', ['today', i, tasksToUpdate[0].id], false)
@@ -35,10 +44,8 @@ router.get("/", async (req, res) => {
         const parentsIds = [...new Set(tasks.map(task => task.child))]
         const tasksWithParent = tasks.map(task => parentsIds.includes(task.id) ? { ...task, isparent: true } : { ...task, isparent: false })
         // const { rows: testtasks } = await pool.query('SELECT id FROM tasks WHERE date::date = $1',[today]) 
-        // console.log("🚀 ~ file: tasks.js ~ line 15 ~ router.get ~ testtasks", testtasks)
 
         // const test = tasks.find(task => task.id === 160).date
-        // console.log("🚀 ~ file: tasks.js ~ line 14 ~ router.get ~ test", test, today, 'dddd', test === today)
 
         res.send(tasksWithParent)
     } catch (error) {
@@ -52,6 +59,18 @@ router.get("/done", async (req, res) => {
 
     try {
         const { rows: tasks } = await pool.query('SELECT t1.*, t2.name as childname FROM tasks t1 LEFT JOIN tasks t2 ON t2.id = t1.child WHERE t1.done = $1 AND t1.donedate', [true, today])
+        res.send(tasks)
+    } catch (error) {
+        console.log(error)
+    }
+});
+
+router.get("/week", async (req, res) => {
+
+    const lastWeek = moment(new Date()).format('W')
+
+    try {
+        const { rows: tasks } = await pool.query('SELECT *, EXTRACT ("week" FROM donedate) as week FROM tasks WHERE done = TRUE AND type = $2 AND EXTRACT ("week" FROM donedate) = $1', [lastWeek, 'задача'])
         res.send(tasks)
     } catch (error) {
         console.log(error)
@@ -81,21 +100,28 @@ router.put("/replan", async (req, res) => {
     const { task_id, oldPlan, newPlan, oldIndex, newIndex } = req.body;
 
     const oldIsLess = oldIndex < newIndex
-    console.log("🚀 ~ file: tasks.js ~ line 195 ~ router.put ~ oldIsLess", oldIsLess)
 
     try {
-        if (oldPlan === newPlan) {
-            if (oldIsLess) {
-                await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND index <= $2 AND plan = $3 AND done = $4', [oldIndex, newIndex, oldPlan, false])
+        if (newIndex) {
+            if (oldPlan === newPlan) {
+                if (oldIsLess) {
+                    await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND index <= $2 AND plan = $3 AND done = $4', [oldIndex, newIndex, oldPlan, false])
+                } else {
+                    await pool.query('UPDATE tasks SET index = index + 1 WHERE index >= $1 AND index < $2 AND plan = $3 AND done = $4', [newIndex, oldIndex, oldPlan, false])
+                }
+                await pool.query('UPDATE tasks SET index = $1 WHERE id = $2', [newIndex, task_id])
             } else {
-                await pool.query('UPDATE tasks SET index = index + 1 WHERE index >= $1 AND index < $2 AND plan = $3 AND done = $4', [newIndex, oldIndex, oldPlan, false])
+                await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND plan = $2 AND done = $3', [oldIndex, oldPlan, false])
+                await pool.query('UPDATE tasks SET index = index + 1 WHERE index >= $1 AND plan = $2 AND done = $3', [newIndex, newPlan, false])
+                await pool.query('UPDATE tasks SET index = $1, plan = $2 WHERE id = $3', [newIndex, newPlan, task_id])
             }
-            await pool.query('UPDATE tasks SET index = $1 WHERE id = $2', [newIndex, task_id])
         } else {
             await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND plan = $2 AND done = $3', [oldIndex, oldPlan, false])
-            await pool.query('UPDATE tasks SET index = index + 1 WHERE index > $1 AND plan = $2 AND done = $3', [oldIndex, newPlan, false])
-            await pool.query('UPDATE tasks SET index = $1 AND plan = $2 WHERE id = $2', [newIndex, newPlan, task_id])
+            const response = await pool.query('SELECT count(id) FROM tasks WHERE done = false AND plan = $1', [newPlan])
+            const newCountIndex = +response.rows[0].count
+            await pool.query('UPDATE tasks SET index = $1 WHERE id = $2', [newCountIndex, task_id]) 
         }
+
 
         // const task = await pool.query('SELECT id FROM tasks WHERE index = $1 and plan = $2 and done = $3', [oldIndex, plan, false])
 
@@ -116,37 +142,42 @@ router.put("/replan", async (req, res) => {
 router.put("/", async (req, res) => {
 
     const { name, type, balance, period, child, goal, plan, repeat, date, id, action, repeatday } = req.body;
-    console.log("🚀 ~ file: tasks.js ~ line 80 ~ router.put ~ date", date)
 
     const dateOrNull = date ? date : null
+    console.log("🚀 ~ file: tasks.js ~ line 136 ~ router.put ~ dateOrNull", dateOrNull)
 
     try {
         const resTask = await pool.query('SELECT plan, index FROM tasks WHERE id = $1', [id])
-        const planBefore = resTask.rows[0].plan
-        const indexBefore = resTask.rows[0].index
+        const oldPlan = resTask.rows[0].plan
+        const oldIndex = resTask.rows[0].index
 
-        // const isPlanWasChanged = planBefore !== plan
+        const isPlanWasChanged = oldPlan !== plan
 
+        if (isPlanWasChanged) {
+            await addToNewPlan(id, oldPlan, plan, oldIndex)
+        }
+        const updatedTask = await pool.query('UPDATE tasks SET name = $1, type = $2, balance = $3, period = $4, child = $5, goal = $6, repeat = $7, date = $8, action = $9, repeatday = $10 WHERE id = $11',
+            [name, type, balance, period, child, goal, repeat, dateOrNull, action, repeatday, id])
         // const isTodayWasChanged = planBefore === 'today' || plan === 'today'
 
-        const deleteFromToday = planBefore === constants.plan.today && plan !== constants.plan.today
-        const addToToday = planBefore !== constants.plan.today && plan === constants.plan.today
-
-        const updatedTask = await pool.query('UPDATE tasks SET name = $1, type = $2, balance = $3, period = $4, child = $5, goal = $6, plan = $7, repeat = $8, date = $9, index = $10, action = $11, repeatday = $12 WHERE id = $10',
-        [name, type, balance, period, child, goal, plan, repeat, dateOrNull, id, action, repeatday])
+        // const deleteFromToday = planBefore === constants.plan.today && plan !== constants.plan.today
+        // const addToToday = planBefore !== constants.plan.today && plan === constants.plan.today
 
 
-        if (deleteFromToday) {
-            await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND plan = $2', [indexBefore, constants.plan.today])
-        }
-
-        if (addToToday) {
-            const response = await pool.query('SELECT count(id) FROM tasks WHERE done = false AND plan = $1', [constants.plan.today])
-            const newIndex = +response.rows[0].count            
-            await pool.query('UPDATE tasks SET index = $1 WHERE id = $2', [newIndex, id])
-        }
 
 
+        // if (deleteFromToday) {
+        //     await pool.query('UPDATE tasks SET index = index - 1 WHERE index > $1 AND plan = $2', [indexBefore, constants.plan.today])
+        // }
+
+        // if (addToToday) {
+        //     const response = await pool.query('SELECT count(id) FROM tasks WHERE done = false AND plan = $1', [constants.plan.today])
+        //     const newIndex = +response.rows[0].count
+        //     await pool.query('UPDATE tasks SET index = $1 WHERE id = $2', [newIndex, id])
+        // }
+
+        // const updatedTask = await pool.query('UPDATE tasks SET name = $1, type = $2, balance = $3, period = $4, child = $5, goal = $6, plan = $7, repeat = $8, date = $9, index = $10, action = $11, repeatday = $12 WHERE id = $10',
+        //     [name, type, balance, period, child, goal, plan, repeat, dateOrNull, id, action, repeatday])
         // if (isPlanWasChanged) {
         //     const response = await pool.query('SELECT count(id) FROM tasks WHERE done = false AND plan = $1', [plan])
         //     const index = +response.rows[0].count
@@ -181,9 +212,6 @@ router.put("/do", async (req, res) => {
         const plan = task[0].plan
 
         if (task[0].repeat) {
-
-            // const newDate = new Date()                      
-            // newDate.setDate(today.getDate() + task[0].repeatday);
             const newDate = moment(today).add(task[0].repeatday, 'days').format('YYYY-MM-DD')
 
             await pool.query(
